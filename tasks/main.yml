@@ -12,6 +12,21 @@
     update_cache: yes
   when: ansible_distribution in ['RedHat', 'CentOS']
 
+- name: Open the port 443
+  iptables:
+    chain: INPUT
+    destination_port: 443
+    action: insert
+    jump: ACCEPT
+    protocol: tcp
+    state: present
+  register: port_443_result
+  when: common_iptables != 'disabled'
+
+- name: Save iptables
+  command: "/sbin/iptables-save"
+  when: port_443_result is changed
+
 - name: Copy server.crt and server.key
   copy:
     src: "{{item}}"
