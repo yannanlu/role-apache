@@ -1,16 +1,57 @@
-LoadModule ssl_module {{mods_dir}}/mod_ssl.so
 LoadModule proxy_module {{mods_dir}}/mod_proxy.so
+LoadModule proxy_ajp_module {{mods_dir}}/mod_proxy_ajp.so
 LoadModule proxy_http_module {{mods_dir}}/mod_proxy_http.so
+{% if ldap_url|length %}
+LoadModule ldap_module {{mods_dir}}/mod_ldap.so
+LoadModule authnz_ldap_module {{mods_dir}}/mod_authnz_ldap.so
+LDAPVerifyServerCert          off
+{% endif %}
 
-Listen 443
+{% if server_name|length == 0 %}
+LoadModule ssl_module {{mods_dir}}/mod_ssl.so
+Listen *:443
+{% endif %}
+
 <VirtualHost *:443>
+{% if server_name|length > 0 %}
+    ServerName {{server_name}}
+{% else %}
+
     SSLEngine on
     SSLCertificateFile "{{conf_dir}}/server.crt"
     SSLCertificateKeyFile "{{conf_dir}}/server.key"
+{% endif %}
 
     ProxyRequests Off
+    ProxyPreserveHost On
 {% for item in locations %}
     ProxyPass "/{{item.service}}" "{{item.proxy}}/{{item.service}}"
+{% if item.reverse_proxy is defined %}
+    ProxyPassReverse "/{{item.service}}" "{{item.reverse_proxy}}/{{item.service}}"
+{% else %}
     ProxyPassReverse "/{{item.service}}" "{{item.proxy}}/{{item.service}}"
+{% endif %}
 {% endfor %}
+{% if ldap_url|length %}
+    <Location {{protected_location}}>
+        AuthName "Please enter your NetID and password"
+        AuthType basic
+        AuthBasicProvider ldap       
+        AuthLDAPUrl {{ldap_url}}
+        AuthLDAPBindDN cn={{ldap_user}},ou=services,dc=emory,dc=edu
+        AuthLDAPBindPassword {{ldap_passwd}}
+        require valid-user
+    </Location>
+{% elif passwd_file|length %}
+    <LocationMatch ^{{protected_location}}>
+        AuthName             "Restricted"
+        AuthType             Basic
+        AuthBasicProvider    file
+        AuthUserFile         {{conf_dir}}/{{passwd_file}}
+        Require              valid-user
+    </LocationMatch>
+{% endif %}
+
+    ErrorLog logs/{{server_name|default('default', true)}}.error_log
+    CustomLog logs/{{server_name|default('default', true)}}.access_log combined
 </VirtualHost>

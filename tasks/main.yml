@@ -7,9 +7,19 @@
 
 - name: Install mod_ssl
   yum:
-    name: mod_ssl
+    name: "{{item}}"
     state: present
     update_cache: yes
+  with_items:
+    - mod_ssl
+  when: ansible_distribution in ['RedHat', 'CentOS']
+
+- name: Remvoe ssl.conf
+  file:
+    path: "{{apache_site_dir}}/{{item}}"
+    state: absent
+  with_items:
+    - ssl.conf
   when: ansible_distribution in ['RedHat', 'CentOS']
 
 - name: Open the port 443
@@ -44,15 +54,29 @@
     mode: 0644
   notify: Restart_apache.service
 
+- name: Copy passwd file
+  copy:
+    src: "../../{{apache_rolename}}/files/{{apache_passwd_file}}"
+    dest: "{{apache_dir}}/"
+    mode: 0644
+  when: apache_passwd_file|length > 0
+  notify: Restart_apache.service
+
 - name: Template of default.conf.j2
   template:
     src: default.conf.j2
-    dest: "{{apache_dir}}/{{apache_default_conf}}"
+    dest: "{{apache_site_dir}}/{{apache_server_name|default('000-default', true)}}.conf"
     mode: 0644
   vars:
+    server_name: "{{apache_server_name}}"
     locations: "{{apache_locations}}"
     conf_dir: "{{apache_dir}}"
     mods_dir: "{{apache_modsdir}}"
+    protected_location: "{{apache_protected_location}}"
+    passwd_file: "{{apache_passwd_file}}"
+    ldap_url: "{{apache_ldap_url}}"
+    ldap_user: "{{apache_ldap_user}}"
+    ldap_passwd: "{{apache_ldap_passwd|replace('\n', '')}}"
   notify: Restart_apache.service
 
 - name: Get stats of monitrc
