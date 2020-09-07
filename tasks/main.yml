@@ -4,6 +4,7 @@
     name: "{{apache_pkg_name}}"
     state: present
     update_cache: yes
+  when: ansible_distribution != 'RedHat'
 
 - name: Install mod_ssl
   yum:
@@ -14,13 +15,34 @@
     - mod_ssl
   when: ansible_distribution in ['RedHat', 'CentOS']
 
-- name: Remvoe ssl.conf
+- include: ldap.yml
+  when: apache_ldap_url|length > 0
+
+- name: Remvoe ssl.conf, etc
   file:
     path: "{{apache_site_dir}}/{{item}}"
     state: absent
   with_items:
+    - autoindex.conf
     - ssl.conf
+    - userdir.conf
+    - welcome.conf
   when: ansible_distribution in ['RedHat', 'CentOS']
+
+- name: Reset read permission on logdir
+  file:
+    path: "{{apache_logdir}}"
+    mode: 0755
+  when: apache_logdir_readable
+
+- name: Create dir for document root
+  file:
+    path: "{{apache_default_doc_root}}"
+    state: directory
+    owner: "{{apache_user}}"
+    group: "{{apache_group}}"
+    mode: 0755
+  when: apache_default_doc_root|length > 0
 
 - name: Open the port 443
   iptables:
@@ -28,13 +50,15 @@
     destination_port: 443
     action: insert
     jump: ACCEPT
+    match: state
+    ctstate: NEW
     protocol: tcp
     state: present
   register: port_443_result
   when: common_iptables != 'disabled'
 
 - name: Save iptables
-  command: "/sbin/iptables-save"
+  shell: "/sbin/iptables-save > /etc/sysconfig/iptables"
   when: port_443_result is changed
 
 - name: Copy server.crt and server.key
@@ -56,27 +80,61 @@
 
 - name: Copy passwd file
   copy:
-    src: "../../{{apache_rolename}}/files/{{apache_passwd_file}}"
+    src: "{{apache_passwd_file}}"
     dest: "{{apache_dir}}/"
-    mode: 0644
+    mode: 0640
   when: apache_passwd_file|length > 0
+  notify: Restart_apache.service
+
+- name: Copy cert file for {{apache_cert_file}}
+  copy:
+    src: "{{apache_cert_file}}"
+    dest: "{{apache_dir}}/"
+    mode: 0640
+  when: apache_cert_file|length > 0
+  notify: Restart_apache.service
+
+- name: Template of key file for {{apache_cert_file}}
+  template:
+    src: "{{apache_cert_file|replace('/files/', '/templates/')|replace('.crt', '.key')}}.j2"
+    dest: "{{apache_dir}}/{{apache_cert_file|basename|replace('.crt', '.key')}}"
+    mode: 0600
+  vars:
+    key_secret: "{{apache_key_secret|replace('\n','')}}"
+  when: apache_cert_file|length > 0
   notify: Restart_apache.service
 
 - name: Template of default.conf.j2
   template:
     src: default.conf.j2
-    dest: "{{apache_site_dir}}/{{apache_server_name|default('000-default', true)}}.conf"
+    dest: "{{apache_site_dir}}/000-default.conf"
     mode: 0644
   vars:
+    doc_root: "{{apache_default_doc_root}}"
+    conf_dir: "{{apache_dir}}"
+    mods_dir: "{{apache_modsdir}}"
+    cert_file: "{{apache_cert_file|basename|default('server.crt', true)}}"
+  notify: Restart_apache.service
+
+- name: Template of server.conf.j2
+  template:
+    src: "{{apache_conf_file|default('server.conf', true)}}.j2"
+    dest: "{{apache_site_dir}}/{{apache_rolename}}.conf"
+    mode: 0644
+  vars:
+    my_rolename: "{{apache_rolename}}"
     server_name: "{{apache_server_name}}"
+    doc_root: "{{apache_doc_root}}"
     locations: "{{apache_locations}}"
     conf_dir: "{{apache_dir}}"
     mods_dir: "{{apache_modsdir}}"
     protected_location: "{{apache_protected_location}}"
-    passwd_file: "{{apache_passwd_file}}"
+    passwd_file: "{{apache_passwd_file|basename}}"
+    cert_file: "{{apache_cert_file|basename|default('server.crt', true)}}"
     ldap_url: "{{apache_ldap_url}}"
     ldap_user: "{{apache_ldap_user}}"
     ldap_passwd: "{{apache_ldap_passwd|replace('\n', '')}}"
+  when: apache_rolename|length > 0
   notify: Restart_apache.service
 
 - name: Get stats of monitrc

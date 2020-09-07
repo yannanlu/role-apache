@@ -1,6 +1,7 @@
 ---
 apache_pkg_name: "{{ 'httpd' if ansible_distribution in ['RedHat','CentOS'] else 'apache2' }}"
-apache_pkg_version: "{{ '2.4.6-67.el7.centos.2' if ansible_distribution in ['RedHat','CentOS'] else '2.4.18-2ubuntu3.5' }}"
+apache_pkg_version: "{{ '2.4.6-90.el7' if ansible_distribution in ['RedHat','CentOS'] else '2.4.18-2ubuntu3.5' }}"
+apache_apr_util_ldap_version: "{{ '1.5.2-6.el7' if ansible_distribution in ['RedHat','CentOS'] else '' }}"
 apache_dir: "{{ '/etc/httpd' if ansible_distribution in ['RedHat','CentOS'] else '/etc/apache2' }}"
 apache_conf_dir: "{{ '/etc/httpd/conf' if ansible_distribution in ['RedHat','CentOS'] else '/etc/apache2' }}"
 apache_site_dir: "{{ '/etc/httpd/conf.d' if ansible_distribution in ['RedHat','CentOS'] else '/etc/apache2/sites-available' }}"
@@ -9,11 +10,17 @@ apache_logdir: "{{ '/var/log/httpd' if ansible_distribution in ['RedHat','CentOS
 apache_pidfile: "{{ '/var/run/httpd/httpd.pid' if ansible_distribution in ['RedHat','CentOS'] else '/var/run/apache2/apache2.pid' }}"
 apache_user: "{{ 'apache' if ansible_distribution in ['RedHat','CentOS'] else 'www-data' }}"
 apache_group: "{{ 'apache' if ansible_distribution in ['RedHat','CentOS'] else 'www-data' }}"
+apache_logdir_readable: True
+apache_default_doc_root: ''
+apache_doc_root: ''
 apache_protected_location: /
-apache_rolename:
+apache_conf_file: ''
+apache_rolename: ''
+apache_cert_file: ''
+apache_key_secret: xxxx
 apache_passwd_file: ''
 apache_ldap_url: ''
-apache_ldap_user: web_services
+apache_ldap_user: guest
 apache_ldap_passwd: xxxx
 apache_server_name: ''
 

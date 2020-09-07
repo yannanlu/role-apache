@@ -1,0 +1,62 @@
+<IfModule !proxy_module>
+LoadModule proxy_module {{mods_dir}}/mod_proxy.so
+</IfModule>
+<IfModule !proxy_ajp_module>
+LoadModule proxy_ajp_module {{mods_dir}}/mod_proxy_ajp.so
+</IfModule>
+<IfModule !proxy_http_module>
+LoadModule proxy_http_module {{mods_dir}}/mod_proxy_http.so
+</IfModule>
+{% if ldap_url|length %}
+<IfModule !ldap_module>
+LoadModule ldap_module {{mods_dir}}/mod_ldap.so
+LoadModule authnz_ldap_module {{mods_dir}}/mod_authnz_ldap.so
+LDAPVerifyServerCert          off
+</IfModule>
+{% endif %}
+
+<VirtualHost *:443>
+    ServerName {{server_name|default(ansible_host, true)}}
+{% if doc_root|length > 0 %}
+    DocumentRoot {{doc_root}}
+{% endif %}
+
+    SSLEngine on
+    SSLCertificateFile {{conf_dir}}/{{cert_file}}
+    SSLCertificateKeyFile {{conf_dir}}/{{cert_file|replace('.crt', '.key')}}
+
+    ProxyRequests Off
+    ProxyPreserveHost On
+{% for item in locations %}
+    ProxyPass /{{item.service}} {{item.proxy}}/{{item.service}} timeout=300
+{% if item.reverse_proxy is defined %}
+    ProxyPassReverse /{{item.service}} {{item.reverse_proxy}}/{{item.service}} timeout=300
+{% else %}
+    ProxyPassReverse /{{item.service}} {{item.proxy}}/{{item.service}} timeout=300
+{% endif %}
+{% endfor %}
+    SetEnv proxy-nokeepalive 1
+
+{% if ldap_url|length %}
+    <Location {{protected_location}}>
+        AuthName "Please enter your NetID and password"
+        AuthType Basic
+        AuthBasicProvider ldap
+        AuthLDAPURL {{ldap_url}}
+        AuthLDAPBindDN cn={{ldap_user}},ou=services,dc=qbroker,dc=org
+        AuthLDAPBindPassword {{ldap_passwd}}
+        Require valid-user
+    </Location>
+{% elif passwd_file|length %}
+    <LocationMatch ^{{protected_location}}>
+        AuthName             "Restricted"
+        AuthType             Basic
+        AuthBasicProvider    file
+        AuthUserFile         {{conf_dir}}/{{passwd_file}}
+        Require              valid-user
+    </LocationMatch>
+{% endif %}
+
+    ErrorLog logs/{{my_rolename}}.error_log
+    CustomLog logs/{{my_rolename}}.access_log combined
+</VirtualHost>

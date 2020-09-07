@@ -1,0 +1,9 @@
+---
+- name: Install mod_ldap
+  yum:
+    name: "{{item}}"
+    state: present
+    update_cache: yes
+  with_items:
+    - mod_ldap
+  when: ansible_distribution in ['RedHat', 'CentOS']
